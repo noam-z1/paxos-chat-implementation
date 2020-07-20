@@ -27,9 +27,6 @@ current_values = {}
 NUM_OF_REPLICAS = 3
 ACKS_THREADS = []
 ACKED_MESSAGES = []
-IS_FAULTY = {'send': True, 'receive': True}  # A dictionary of the replicas
-# state. if the replica is faulty, one of those is False, and deny
-# send\receive ability
 global are_clients_connected
 
 ADDR = (HOST, START_PORT + REPLICA_ID)
@@ -72,14 +69,13 @@ def ack_sent_message(message):
     :param message: The message to send
     :return: True when the message was acked
     """
-    if IS_FAULTY['send']:
-        while True:
-            if message in ACKED_MESSAGES:
-                ACKED_MESSAGES.remove(message)
-                return True
-            else:
-                simulator_socket.send(pickle.dumps(message))
-                time.sleep(0.5)
+    while True:
+        if message in ACKED_MESSAGES:
+            ACKED_MESSAGES.remove(message)
+            return True
+        else:
+            simulator_socket.send(pickle.dumps(message))
+            time.sleep(0.5)
 
 
 def notify_client_log_in(name, is_mine):
@@ -169,30 +165,11 @@ def receive_messages():
                     try:
                         msg = pickle.loads(message)
                         # If we pickled, we received a true message
-                        if msg == "fixed":
-                            # the replica is fixed
-                            simulator_socket.send(pickle.dumps(["ack", msg]))
-                            IS_FAULTY['send'] = True
-                            IS_FAULTY['receive'] = True
-                        elif msg == "faulty":
-                            # the replica is faulty. it's a 50/50 if it can't
-                            # send or can't receive
-                            simulator_socket.send(pickle.dumps(["ack", msg]))
-                            IS_FAULTY['send'] = True
-                            IS_FAULTY['receive'] = True
-                            if bool(random.getrandbits(1)):
-                                IS_FAULTY['send'] = False
-                                print("I'm faulty, can't send")
-                            else:
-                                IS_FAULTY['receive'] = False
-                                print("I'm faulty, can't receive")
+                        if msg[0] == 'ack' or msg[0] == "ack":
+                            ACKED_MESSAGES.append(msg[1])
                         else:
-                            if msg[0] == 'ack' or msg[0] == "ack":
-                                ACKED_MESSAGES.append(msg[1])
-                            else:
-                                simulator_socket.send(pickle.dumps(["ack", msg]))
-                                if IS_FAULTY['receive']:
-                                    messages_queue.append(msg)
+                            simulator_socket.send(pickle.dumps(["ack", msg]))
+                            messages_queue.append(msg)
                     except pickle.UnpicklingError as err:
                         # Can't pickle, not a regular message
                         msg = message.decode("utf8").split()
@@ -471,6 +448,7 @@ def paxos_protocol(curr_values, messages, curr_view, status):
             if status == 5:
                 to_remove = []
                 for in_message in messages:
+                    print(in_message)
                     if in_message[0] == -1:
                         # if the message is the elected primary
                         if in_message[3] == curr_view:

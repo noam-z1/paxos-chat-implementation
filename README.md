@@ -35,3 +35,7 @@ Probably if the clients were not depended on a single server but on a more "gene
 but implementing it was probably more complicated, so I''ve chose no to
 - Every time a socket is closing, the other end crashes, probably should have fixed it, but it doesn't effect the paxos 
 protocol(since a server is closed when I'm exiting it's script) so I've skipped it
+
+
+Version 1.1:
+- Faulty server is done in the simulator scope, the server itself behaves as usual

@@ -23,6 +23,11 @@ elected_primaries = {}
 given_primaries = {}
 ACKED_MESSAGES = []
 
+IS_FAULTY = {}  # A dictionary of the
+# replicas' state dictionary(each replica has it's own state of send/recieve
+# faulty. if the replica is faulty, one of those is False, and deny
+# send\receive ability
+
 
 def ack_sent_message(message, server, is_delay=True):
     """
@@ -88,6 +93,7 @@ def listen_thread_func():
                     # If the connected is a server
                     new_server_id = int(name)
                     server_sockets[new_server_id] = new_socket
+                    IS_FAULTY[new_server_id] = {'send': True, 'receive': True}
                     print("Connected to server " + str(new_server_id) + ".")
                 except error as err:
                     # If the name was not a server id, there something wrong
@@ -98,7 +104,7 @@ def listen_thread_func():
                     msg = pickle.loads(message)
                     # If we pickled, we received a true message
                     if msg[0] == "ack" or msg[0] == 'ack':
-                        # the message needs an ack
+                        # there is a message that this is it's ack
                         ACKED_MESSAGES.append(msg[1])
                     else:
                         src = msg[0]
@@ -116,6 +122,7 @@ def listen_thread_func():
                             if get_primary(elected_primaries, given_primaries,
                                            src, msg[2],
                                            len(server_sockets) - 1):
+                                print("Enough dones, send elected replica to all")
                                 for server in server_sockets:
                                     message = [-1, server, "primary "
                                                "elected", msg[2],
@@ -126,9 +133,14 @@ def listen_thread_func():
                                                                        False))
                                     message_thread.start()
                         else:
-                            message_thread = Thread(
-                                target=ack_sent_message, args=(msg, dest))
-                            message_thread.start()
+                            if IS_FAULTY[src]['send'] and IS_FAULTY[dest][
+                                                                    'receive']:
+                                # Send the message only if the source
+                                # replica is not send-faulty and the
+                                # destination replica is not receive-faulty
+                                message_thread = Thread(
+                                    target=ack_sent_message, args=(msg, dest))
+                                message_thread.start()
                 except:
                     # Can't pickle, so a server sent a client's name
                     # A server has sent a name, logged in or logged out
@@ -162,9 +174,15 @@ def set_faulty():
             print("selecting faulty")
             new_faulty = random.choice(list(server_sockets.keys()))
             if faulty != new_faulty:
-                if faulty in server_sockets:
-                    ack_sent_message("fixed", faulty, False)
-                ack_sent_message("faulty", new_faulty, False)
+                if faulty != -1:
+                    IS_FAULTY[faulty]['send'] = True
+                    IS_FAULTY[faulty]['receive'] = True
+                if bool(random.getrandbits(1)):
+                    IS_FAULTY[new_faulty]['send'] = False
+                    print("Replica", new_faulty, " can't send")
+                else:
+                    IS_FAULTY[new_faulty]['receive'] = False
+                    print("Replica", new_faulty, " can't receive")
                 faulty = new_faulty
             seconds = (random.randint(1, 5) + 5)*30
             time.sleep(seconds)
